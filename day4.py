@@ -1,5 +1,5 @@
 import sys
-sys.path.append("D:\\python_libs")   # TensorFlow path
+sys.path.append("D:\\python_libs")
 
 import cv2
 import os
@@ -9,6 +9,8 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D, Dropout
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.callbacks import EarlyStopping
 
 # -----------------------------
 # 1. Load Dataset
@@ -25,7 +27,6 @@ for label, category in enumerate(["crop", "weed"]):
         img_path = os.path.join(folder_path, img_name)
 
         img = cv2.imread(img_path)
-
         if img is None:
             continue
 
@@ -34,13 +35,13 @@ for label, category in enumerate(["crop", "weed"]):
         labels.append(label)
 
 # -----------------------------
-# 2. Convert to NumPy arrays
+# 2. Convert to arrays
 # -----------------------------
 data = np.array(data)
 labels = np.array(labels)
 
 # -----------------------------
-# 3. Shuffle data
+# 3. Shuffle (IMPORTANT)
 # -----------------------------
 indices = np.arange(len(data))
 np.random.shuffle(indices)
@@ -54,18 +55,19 @@ labels = labels[indices]
 data = data / 255.0
 
 # -----------------------------
-# 5. Convert labels
+# 5. One-hot encoding
 # -----------------------------
-labels = to_categorical(labels, 2)
+labels_cat = to_categorical(labels, 2)
 
 # -----------------------------
-# 6. Dataset check
+# 6. Train-Test Split
 # -----------------------------
-print("Crop count:", np.sum(labels[:,0]))
-print("Weed count:", np.sum(labels[:,1]))
+X_train, X_test, y_train, y_test = train_test_split(
+    data, labels_cat, test_size=0.2, stratify=labels
+)
 
 # -----------------------------
-# 7. Data Augmentation
+# 7. Data Augmentation (SAFE)
 # -----------------------------
 datagen = ImageDataGenerator(
     rotation_range=20,
@@ -73,10 +75,10 @@ datagen = ImageDataGenerator(
     horizontal_flip=True
 )
 
-datagen.fit(data)
+datagen.fit(X_train)
 
 # -----------------------------
-# 8. CNN Model + Dropout
+# 8. SIMPLE CNN (BEST FOR YOUR DATA)
 # -----------------------------
 model = Sequential([
     Conv2D(32, (3,3), activation='relu', input_shape=(64,64,3)),
@@ -102,16 +104,33 @@ model.compile(
 )
 
 # -----------------------------
-# 10. Train (FIXED - no validation_split)
+# 10. Early Stopping
 # -----------------------------
-model.fit(
-    datagen.flow(data, labels, batch_size=8),
-    epochs=15
+early_stop = EarlyStopping(
+    monitor='val_loss',
+    patience=3,
+    restore_best_weights=True
 )
 
 # -----------------------------
-# 11. Save Model
+# 11. Train
 # -----------------------------
-model.save("model.h5")
+model.fit(
+    datagen.flow(X_train, y_train, batch_size=8),
+    epochs=15,
+    validation_data=(X_test, y_test),
+    callbacks=[early_stop]
+)
 
-print("✅ Training complete. Model saved as model.h5")
+# -----------------------------
+# 12. Evaluate
+# -----------------------------
+loss, acc = model.evaluate(X_test, y_test)
+print("✅ Test Accuracy:", acc)
+
+# -----------------------------
+# 13. Save Model
+# -----------------------------
+model.save("model.keras")
+
+print("✅ Training complete. Model saved as model.keras")

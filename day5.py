@@ -3,28 +3,63 @@ sys.path.append("D:\\python_libs")
 
 import cv2
 import numpy as np
-from tensorflow.keras.models import load_model
+import os
+import tensorflow as tf
 
-# Load trained model
-model = load_model("model.h5")
+# -----------------------------
+# 1. Load Model
+# -----------------------------
+model = tf.keras.models.load_model("model.keras")
 
-# Load test image
-img = cv2.imread("test.jpg")
+# -----------------------------
+# 2. Test Images Folder
+# -----------------------------
+test_path = "test_images"
 
-if img is None:
-    print("Image not found")
-    exit()
+# -----------------------------
+# 3. Loop through images
+# -----------------------------
+for img_name in os.listdir(test_path):
 
-# Preprocess image
-img = cv2.resize(img, (64, 64))
-img = img / 255.0
-img = np.reshape(img, (1, 64, 64, 3))
+    img_path = os.path.join(test_path, img_name)
 
-# Predict
-prediction = model.predict(img)
+    img = cv2.imread(img_path)
 
-# Output
-if prediction[0][0] > prediction[0][1]:
-    print("🌱 Prediction: Crop")
-else:
-    print("🌿 Prediction: Weed")
+    if img is None:
+        print(f"❌ Could not load {img_name}")
+        continue
+
+    # -----------------------------
+    # 4. Preprocess
+    # -----------------------------
+    img_resized = cv2.resize(img, (64, 64))
+    img_normalized = img_resized / 255.0
+    img_input = np.expand_dims(img_normalized, axis=0)
+
+    # -----------------------------
+    # 5. Prediction
+    # -----------------------------
+    prediction = model.predict(img_input)[0]
+
+    crop_prob = prediction[0]
+    weed_prob = prediction[1]
+
+    confidence = max(crop_prob, weed_prob)
+
+    # -----------------------------
+    # 6. Output
+    # -----------------------------
+    if confidence < 0.6:
+        print(f"{img_name} → ⚠️ Uncertain ({confidence*100:.2f}%)")
+    elif crop_prob > weed_prob:
+        print(f"{img_name} → 🌾 Crop ({crop_prob*100:.2f}%)")
+    else:
+        print(f"{img_name} → 🌿 Weed ({weed_prob*100:.2f}%)")
+
+    # -----------------------------
+    # 7. Show image (optional)
+    # -----------------------------
+    cv2.imshow("Image", img)
+    cv2.waitKey(1000)
+
+cv2.destroyAllWindows()
